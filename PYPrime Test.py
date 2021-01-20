@@ -3,6 +3,7 @@ from platform import system, release, version
 from subprocess import check_output
 from ctypes import WinDLL, wintypes, byref
 
+
 # Imports kernel32.dll
 kernel32 = WinDLL('kernel32', use_last_error=True)
 
@@ -11,53 +12,48 @@ ending_time = wintypes.LARGE_INTEGER()
 elapsed_time = wintypes.LARGE_INTEGER()
 frequency = wintypes.LARGE_INTEGER()
 
+QueryPerformanceFrequency = kernel32.QueryPerformanceFrequency(byref(frequency))
+
 # Upper limit for primes
 pr = 8000000
 OS = system()
 Runs = []
 
-# Main UI
 
+# Main UI
 
 class UI:
     Title = f"{85 * '-'}\n{35 * ' '}PYPrime 1.10 Windows{35 * ' '}\n{85 * '-'}\n\n"
     Description = '\nThis is a strictly single core benchmark. Please close all applications running in background to get the most reliable result\n'
     UserInput = f'{34 * "*"}\nPress ENTER to start the benchmark'
     ExitPrompt = 'Press ENTER to exit'
+    InvalidExitPrompt = '\nInvalid run detected, press ENTER to exit'
     StartThing = 'Starting Benchmark...\n'
 
     def __init__(self, t):
         self.t = t
+
     # Score
 
     def Score(self):
         ScoreText = f"Average completion time: {round(self.t, 3)} s"
-        hashes = "\n"+len(ScoreText)*"#"+"\n"
+        hashes = "\n" + len(ScoreText) * "#" + "\n"
         print(hashes + ScoreText + hashes)
 
-    def __str__(self):
-        return
 
 # Gets the system specifications
 
-
 class Specs:
-    def __init__(self, System):
-        self.System = System
+    def __init__(self, Sys):
         # OS and build version
+        self.System = Sys
         self.sys = f'{self.System} {release()}, Build {version()}'
-        # CPU model name
-        self.cpu = check_output('wmic cpu get name /format:list').strip().decode()[5:]
-        # CPU Clock base clock speed
-        self.clock = float(check_output('wmic cpu get currentclockspeed').strip().decode()[22:]) / 1000
-        # Total ram installed
-        self.ram = round(float(check_output('wmic OS get TotalVisibleMemorySize /Value').strip().decode()[23:]) / 1048576, 1)
+        self.timer = frequency.value / 1000000
 
     def system_info(self):
         return f'OS: {self.sys}\n' \
-               f'CPU: {self.cpu}\n' \
-               f'CPU Base Clock Speed: {self.clock} GHz\n' \
-               f'Total RAM installed: {self.ram} GB\n'
+               f'Timer: {self.timer} MHz\n'
+
 
 # Prime Calculation
 
@@ -84,33 +80,45 @@ def Benchmark(limit):
         if sieve[p]:
             P.append(p)
 
+    return P[-1]
+
+
 # Executes the main algorithm and calculates the elapsed time using the QPC timer
 
 
-def main():
-    kernel32.QueryPerformanceFrequency(byref(frequency))
+def main(QPF):
+    valid = False
     kernel32.QueryPerformanceCounter(byref(starting_time))
-    Benchmark(pr)
+    if Benchmark(pr) == 7999993:
+        valid = True
     kernel32.QueryPerformanceCounter(byref(ending_time))
-
     elapesed_time = ending_time.value - starting_time.value
-    elapesed_time /= frequency.value
+    elapesed_time /= QPF
 
     Runs.append(elapesed_time)
+    return [valid, elapesed_time]
 
 
 System = Specs(OS)
+
+
 print(UI.Title + System.system_info() + UI.Description)
 input(UI.UserInput)
 print(UI.StartThing)
 
 # Runs the benchmark 5 times and then calculates the average completion time
-for i in range(5):
-    main()
-    print(f"Completed run {i + 1}/5")
+while True:
+    for i in range(5):
+        results = main(frequency.value)
+        print(f"Completed run {i + 1}/5 in {round(results[1], 3)}s {'VALID' if results[0] == True else 'INVALID'}")
+        if not results[0]:
+            break
+    else:
+        CurrentScore = UI(sum(sorted(Runs)[1:4]) / 3)
+        CurrentScore.Score()
 
-CurrentScore = UI(sum(Runs) / len(Runs))
-CurrentScore.Score()
-
-# Asks for input to close the program, otherwise the window would close instantly after finishing the benchmark
-input(UI.ExitPrompt)
+        # Asks for input to close the program, otherwise the window would close instantly after finishing the benchmark
+        input(UI.ExitPrompt)
+        break
+    input(UI.InvalidExitPrompt)
+    break
